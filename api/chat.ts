@@ -1,6 +1,6 @@
 
 import { GoogleGenAI, HarmCategory, HarmBlockThreshold } from "@google/genai";
-import type { Message } from "../src/types";
+import type { Message } from "../types";
 
 // Vercel AI SDK requires this configuration
 export const config = {
