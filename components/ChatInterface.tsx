@@ -1,9 +1,7 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { type Message, Sender } from '../types';
 import ChatMessage from './ChatMessage';
 import ChatInput from './ChatInput';
-import { initializeChat } from '../services/geminiService';
-import { type Chat } from '@google/genai';
 
 const ChatInterface: React.FC = () => {
   const [messages, setMessages] = useState<Message[]>([
@@ -14,12 +12,7 @@ const ChatInterface: React.FC = () => {
     },
   ]);
   const [isLoading, setIsLoading] = useState(false);
-  const chatRef = useRef<Chat | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    chatRef.current = initializeChat();
-  }, []);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -29,33 +22,51 @@ const ChatInterface: React.FC = () => {
     scrollToBottom();
   }, [messages]);
 
-  const handleSendMessage = useCallback(async (text: string) => {
-    if (!text.trim() || isLoading || !chatRef.current) return;
+  const handleSendMessage = async (text: string) => {
+    if (!text.trim() || isLoading) return;
 
     const userMessage: Message = { id: Date.now().toString(), text, sender: Sender.User };
     setMessages((prev) => [...prev, userMessage]);
     setIsLoading(true);
 
     const botMessageId = (Date.now() + 1).toString();
-    // Add a placeholder for the bot's message
     setMessages((prev) => [
       ...prev,
       { id: botMessageId, text: '', sender: Sender.Bot },
     ]);
 
     try {
-      const result = await chatRef.current.sendMessageStream({ message: text });
+      const response = await fetch('/api/chat', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ message: text, history: messages }),
+      });
+
+      if (!response.ok || !response.body) {
+          throw new Error(`Request failed with status ${response.status}`);
+      }
+      
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
       let streamedText = '';
-      for await (const chunk of result) {
-        streamedText += chunk.text;
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        
+        streamedText += decoder.decode(value, { stream: true });
+        
         setMessages((prev) =>
           prev.map((msg) =>
             msg.id === botMessageId ? { ...msg, text: streamedText } : msg
           )
         );
       }
+
     } catch (error) {
-      console.error('Error sending message to Gemini:', error);
+      console.error('Error sending message:', error);
       setMessages((prev) =>
         prev.map((msg) =>
           msg.id === botMessageId
@@ -66,7 +77,7 @@ const ChatInterface: React.FC = () => {
     } finally {
       setIsLoading(false);
     }
-  }, [isLoading]);
+  };
 
   return (
     <div className="flex flex-col h-full bg-white dark:bg-gray-800 rounded-lg shadow-lg overflow-hidden">
