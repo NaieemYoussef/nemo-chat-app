@@ -3,14 +3,12 @@ import { type Message, Sender } from '../types';
 import ChatMessage from './ChatMessage';
 import ChatInput from './ChatInput';
 
-const ChatInterface: React.FC = () => {
-  const [messages, setMessages] = useState<Message[]>([
-    {
-      id: 'initial',
-      text: 'أهلاً بك، أنا رفيقك النفسي. أنا هنا لمساعدتك في استكشاف أفكارك ومشاعرك بأساليب علمية. كيف يمكنني مساعدتك اليوم؟',
-      sender: Sender.Bot,
-    },
-  ]);
+interface ChatInterfaceProps {
+  messages: Message[];
+  setMessages: React.Dispatch<React.SetStateAction<Message[]>>;
+}
+
+const ChatInterface: React.FC<ChatInterfaceProps> = ({ messages, setMessages }) => {
   const [isLoading, setIsLoading] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -25,15 +23,15 @@ const ChatInterface: React.FC = () => {
   const handleSendMessage = async (text: string) => {
     if (!text.trim() || isLoading) return;
 
-    const userMessage: Message = { id: Date.now().toString(), text, sender: Sender.User };
-    setMessages((prev) => [...prev, userMessage]);
     setIsLoading(true);
 
+    const userMessage: Message = { id: Date.now().toString(), text, sender: Sender.User };
+    const historyForApi = [...messages, userMessage];
+    
     const botMessageId = (Date.now() + 1).toString();
-    setMessages((prev) => [
-      ...prev,
-      { id: botMessageId, text: '', sender: Sender.Bot },
-    ]);
+    const botPlaceholder: Message = { id: botMessageId, text: '', sender: Sender.Bot };
+    
+    setMessages([...historyForApi, botPlaceholder]);
 
     try {
       const response = await fetch('/api/chat', {
@@ -41,7 +39,7 @@ const ChatInterface: React.FC = () => {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ message: text, history: messages }),
+        body: JSON.stringify({ message: text, history: historyForApi }),
       });
 
       if (!response.ok || !response.body) {
